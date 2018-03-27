@@ -14,16 +14,16 @@ def vpc_cleanup(vpcid):
     ec2client = ec2.meta.client
     vpc = ec2.Vpc(vpcid)
 
-    print('##############################')
-    print('Hold Onto Your Hat...........')
-    print('##############################')
+    print('#######################################################')
+    print('# Hold Onto Your Hat Deletion In Progress........... #')
+    print('######################################################')
     # delete any instances
     for subnet in vpc.subnets.all():
         print('Termination In Progress')
         for instance in subnet.instances.all():
             instance.terminate()
-            print('In Progress......')
-            instance.wait_until_terminated()
+            print('Please Wait')
+        instance.wait_until_terminated()
     print('Instances Gone')
 
 
@@ -31,6 +31,7 @@ def vpc_cleanup(vpcid):
     for gw in vpc.internet_gateways.all():
         vpc.detach_internet_gateway(InternetGatewayId=gw.id)
         gw.delete()
+    print("Internet Gateway Gone")
 
     rtl = vpc.route_tables.all()
     count = sum(1 for _ in rtl)
@@ -46,7 +47,7 @@ def vpc_cleanup(vpcid):
             for r in rt.routes:
                 try:
                     x = r.delete()
-                    print(x)
+                   #  print(x)
                 except:
                     pass
             try:
@@ -96,7 +97,7 @@ def vpc_cleanup(vpcid):
     # finally, delete the vpc
     ec2client.delete_vpc(VpcId=vpcid)
     print('##############################')
-    print('My Work Here Is Done')
+    print('#### My Work Here Is Done ####')
     print('##############################')
  
  
