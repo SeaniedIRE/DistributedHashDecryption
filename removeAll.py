@@ -23,7 +23,7 @@ def vpc_cleanup(vpcid):
         for instance in subnet.instances.all():
             instance.terminate()
             print('Please Wait')
-        instance.wait_until_terminated()
+            instance.wait_until_terminated()
     print('Instances Gone')
 
 
