@@ -31,12 +31,14 @@ print('Route Tables Built')
 subnet1 = ec2.create_subnet(CidrBlock='192.168.1.0/24', VpcId=vpc.id)
 subnet1.create_tags(Tags=[{"Key": "Name", "Value": "public"}])
 print(subnet1.id)
+S1 = subnet1.id
 print('Public Subnet, Setup')
 
 # create private subnet
 subnet2 = ec2.create_subnet(CidrBlock='192.168.2.0/24', VpcId=vpc.id)
 subnet2.create_tags(Tags=[{"Key": "Name", "Value": "private"}])
 print(subnet2.id)
+S2 - subnet2.id
 print('Private Subnet, Setup')
 
 # associate the route table with the subnet

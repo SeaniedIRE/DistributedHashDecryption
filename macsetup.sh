@@ -10,6 +10,11 @@ python -m pip install --user boto3
 
 pip install virtualenv
 
+pip install paramiko
+
+pip install scp
+
+
 git clone https://github.com/boto/boto3.git
 
 mkdir  ~/.aws/credentials
@@ -22,3 +27,4 @@ $ virtualenv venv
 $ . venv/bin/activate
 $ pip install -r requirements.txt
 $ pip install -e .
+
