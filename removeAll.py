@@ -124,7 +124,7 @@ def createVPC():
         NetworkInterfaces=[{'SubnetId': subnet1.id, 'DeviceIndex': 0, 'AssociatePublicIpAddress': True, 'Groups': [sec_groupPublic.group_id]}])
 
     instances = ec2.create_instances(
-        ImageId='ami-f90a4880', InstanceType='t2.micro', MaxCount=2, MinCount=1,
+        ImageId='ami-f90a4880', InstanceType='t2.micro', MaxCount=2, MinCount=1, KeyName="InternalAssetsDistributedKey",
         NetworkInterfaces=[{'SubnetId': subnet2.id, 'DeviceIndex': 0, 'AssociatePublicIpAddress': False, 'Groups': [sec_groupPrivate.group_id]}])
 
     print('')
@@ -162,6 +162,7 @@ def createVPC():
         for instance in subnet.instances.all():
             if instance.public_ip_address is not None:
                 print instance.public_ip_address
+                controllerNodePubIP = instance.public_ip_address
                 print('########################################')
                 print('')
                 cert = paramiko.RSAKey.from_private_key_file("/Users/sean/.aws/DistributedKey.pem")
@@ -175,34 +176,74 @@ def createVPC():
                 print "connected!!!"
 
                 print 30 * "-" , "Basic Update of OS" , 30 * "-"
-                #stdin, stdout, stderr = sshcon.exec_command('sudo apt-get -y update ** sudo apt-get -y upgrade && sudo apt-get install -y build-essential libssl-dev && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y build-essential libssl-dev && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y build-essential libssl-dev && sudo apt-get install -y libgmp3-dev p7zip-full')
-               # print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get install -y build-essential libssl-dev && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y libgmp3-dev p7zip-full python python-pip')
+                print stdout.read()
                 print 30 * "-" , "Dependencies Install" , 30 * "-"
                # stdin, stdout, stderr = sshcon.exec_command('sudo apt-get install -y yasm libgmp-dev libpcap-dev libnss3-dev libkrb5-dev pkg-config nvidia-cuda-toolkit nvidia-opencl-dev libopenmpi-dev openmpi-bin')
-                #print stdout.read()
+                # print stdout.read()
                 print 30 * "-" , "Cloning Latest JtR Git Repo" , 30 * "-"
                 #stdin, stdout, stderr = sshcon.exec_command('git clone git://github.com/magnumripper/JohnTheRipper -b bleeding-jumbo john')
-                #print stdout.read()
+               #  print stdout.read()
+                print 30 * "-" , "Pip Installs" , 30 * "-"
+                stdin, stdout, stderr = sshcon.exec_command('pip install paramiko')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('pip install scp')
+                print stdout.read()
                 print 30 * "-" , "Make Install in Progress" , 30 * "-"
                # stdin, stdout, stderr = sshcon.exec_command('cd ~/john/src && sudo ./configure && sudo make -s clean && sudo make -sj4')
                 #print stdout.read()
-               # stdin, stdout, stderr = sshcon.exec_command('../run/john --test=0')
+               # stdin, stdout, stderr = sshcon.exec_command('../run/john --test=0') sudo apt-get install python-pip
+
                # print stdout.read()
                 print 30 * "-" , "Copying Private Key for Nodes" , 30 * "-"
                 scp = SCPClient(sshcon.get_transport())
                 scp.put("/Users/sean/.aws/InternalAssetsDistributedKey.pem")
+                print 30 * "-" , "Copying Node Setup Bash Script" , 30 * "-"
+                scp.put("/Users/sean/.aws/nodePackageInstall.sh")
+                print 30 * "-" , "Chmoding Pem File" , 30 * "-"
                 stdin, stdout, stderr = sshcon.exec_command('chmod 400 InternalAssetsDistributedKey.pem')
                 print 30 * "-" , "Copying List of Private IP's" , 30 * "-"
                 scp.put("PrivateIps.txt")
-
+                 # sshcon.close()
+                certPrivate = paramiko.RSAKey.from_private_key_file("/Users/sean/.aws/InternalAssetsDistributedKey.pem")
+                print 30 * "-" , "Connecting to Nodes" , 30 * "-"
                 for subnet in vpc.subnets.all():
                     if subnet.id == globalSubnet2val:
                         for instance in subnet.instances.all():
-                            print(instance.private_ip_address)
-                stdin, stdout, stderr = sshcon.exec_command('sudo reboot')
+                            if instance.private_ip_address is not None:
+                                print ('Connecting to: ', instance.private_ip_address)
+                                var1=instance.private_ip_address
+                                
 
+                                print("Below is Var")
+        
+                                str(var1)
+                                print(var1)
+                                command=('scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@%s:/home/ubuntu' % (var1,))
+
+    
+
+                                #command2=("2scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@"+instance.private_ip_addresss+":~")
+                                print (command) 
+                                #print command2
+                                
+
+                                stdin, stdout, stderr = sshcon.exec_command('certPrivate = paramiko.RSAKey.from_private_key_file("InternalAssetsDistributedKey.pem")')
+                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate = paramiko.SSHClient()')
+                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.set_missing_host_key_policy(paramiko.AutoAddPolicy())')
+                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.connect(hostname = %s, username = "ubuntu", pkey = certPrivate,)' % (var1))
+
+                                stdin, stdout, stderr = sshcon.exec_command(command)
+                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("chmod +x nodePackageInstall.sh")')
+                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("./nodePackageInstall.sh")')
+                                stdin, stdout, stderr = sshcon.exec_command("sshconPrivate.close()")
+                                print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
+                                
+                                
 
                 sshcon.close()
+               # stdin, stdout, stderr = sshcon.exec_command('sudo reboot')
+
 
     print "Package Install Complete, YAY!!!" 
 
