@@ -204,8 +204,7 @@ def createVPC():
                 stdin, stdout, stderr = sshcon.exec_command('chmod 400 InternalAssetsDistributedKey.pem')
                 print 30 * "-" , "Copying List of Private IP's" , 30 * "-"
                 scp.put("PrivateIps.txt")
-                 # sshcon.close()
-                certPrivate = paramiko.RSAKey.from_private_key_file("/Users/sean/.aws/InternalAssetsDistributedKey.pem")
+        
                 print 30 * "-" , "Connecting to Nodes" , 30 * "-"
                 for subnet in vpc.subnets.all():
                     if subnet.id == globalSubnet2val:
@@ -213,31 +212,31 @@ def createVPC():
                             if instance.private_ip_address is not None:
                                 print ('Connecting to: ', instance.private_ip_address)
                                 var1=instance.private_ip_address
-                                
-
-                                print("Below is Var")
-        
                                 str(var1)
-                                print(var1)
-                                command=('scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@%s:/home/ubuntu' % (var1,))
-
-    
+                                command=('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/nodePackageInstall.sh ubuntu@%s:~' % (var1))
+                                stdin, stdout, stderr = sshcon.exec_command(command)
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "touch fart.txt"' % (var1))
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh"' % (var1))
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh"' % (var1))
+                                print stdout.read()
+                                print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
 
                                 #command2=("2scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@"+instance.private_ip_addresss+":~")
-                                print (command) 
                                 #print command2
                                 
 
-                                stdin, stdout, stderr = sshcon.exec_command('certPrivate = paramiko.RSAKey.from_private_key_file("InternalAssetsDistributedKey.pem")')
-                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate = paramiko.SSHClient()')
-                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.set_missing_host_key_policy(paramiko.AutoAddPolicy())')
-                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.connect(hostname = %s, username = "ubuntu", pkey = certPrivate,)' % (var1))
+                                #stdin, stdout, stderr = sshcon.exec_command('certPrivate = paramiko.RSAKey.from_private_key_file("/home/ubuntu/InternalAssetsDistributedKey.pem")')
+                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate = paramiko.SSHClient()')
+                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.set_missing_host_key_policy(paramiko.AutoAddPolicy())')
+                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.connect(hostname = %s, username = "ubuntu", pkey = certPrivate,)' % (var1))
 
-                                stdin, stdout, stderr = sshcon.exec_command(command)
-                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("chmod +x nodePackageInstall.sh")')
-                                stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("./nodePackageInstall.sh")')
-                                stdin, stdout, stderr = sshcon.exec_command("sshconPrivate.close()")
-                                print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
+                                #stdin, stdout, stderr = sshcon.exec_command('touch potato.txt')
+                                #stdin, stdout, stderr = sshcon.exec_command('scp = SCPClient(sshconPrivate.get_transport()')
+                                #stdin, stdout, stderr = sshcon.exec_command('scp.put("potato.txt"')
+                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("chmod +x nodePackageInstall.sh")')
+                               #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("./nodePackageInstall.sh")')
+                                #stdin, stdout, stderr = sshcon.exec_command("sshconPrivate.close()")
+
                                 
                                 
 

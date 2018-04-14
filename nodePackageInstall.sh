@@ -13,6 +13,7 @@ cd ~/john/src
 sudo ./configure 
 sudo make -s clean 
 sudo make -sj4
+sudo reboot
 ../run/john --test=0
 
 
