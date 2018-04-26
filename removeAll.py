@@ -10,6 +10,8 @@ ec2 = boto3.resource('ec2')
 client = boto3.client('ec2')
 s3 = boto3.client("s3")
 ec2client = ec2.meta.client
+efsclient = boto3.client('efs')
+
 
 globalSubnet1val=''
 globalSubnet2val=''
@@ -61,6 +63,10 @@ def createVPC():
     vpc.attach_internet_gateway(InternetGatewayId=ig.id)
     ig.create_tags(Tags=[{"Key": "Name", "Value": "IntGW"}])
     print('Internet Gateway online, ID: ',ig.id)
+
+
+    efsbuild = efsclient.create_file_system(CreationToken='dsf3sdfsdf32432',PerformanceMode='generalPurpose',Encrypted=False,)
+    print('EFS Stroage Online')
 
     # create a route table and a public route
     route_table_public = vpc.create_route_table()
@@ -136,8 +142,37 @@ def createVPC():
         FromPort=22,
         ToPort=22
     )
+
     print('Public Security Group is Securing Things Too! Only SSH and ICMP Traffic is Permitted')
 
+    tempefs = efsbuild['FileSystemId']
+    tempefs = tempefs.encode('ascii')
+
+    response = efsclient.create_tags(FileSystemId=tempefs,
+        Tags=[
+            {
+                'Key': 'Name',
+                'Value': 'HashDecFileSystem',
+            },
+        ],
+    )
+    
+    moutefs = efsclient.create_mount_target(
+        FileSystemId=tempefs,             
+        SubnetId=subnet2.id,    
+        IpAddress='192.168.2.5',
+        SecurityGroups=[sec_groupPrivate.id],        
+    )
+    text_file = open("efsIDFile.sh", "w")
+    text_file.write("#!/bin/bash")
+    text_file.write("\n")
+    # text_file.write("EFSVAR=%s" % (tempefs))
+    # text_file.write("\n")
+    text_file.write("sudo mount -t efs -o tls %s:/ /home/ubuntu/efsMount" % (tempefs))
+    text_file.close() 
+
+    print('EFS Stroage Mounted')
+   
     instances = ec2.create_instances(
         ImageId='ami-f90a4880', InstanceType='t2.micro', MaxCount=1, MinCount=1, KeyName="DistributedKey",
         NetworkInterfaces=[{'SubnetId': subnet1.id, 'DeviceIndex': 0, 'AssociatePublicIpAddress': True, 'Groups': [sec_groupPublic.group_id]}])
@@ -223,7 +258,9 @@ def createVPC():
                 stdin, stdout, stderr = sshcon.exec_command('chmod 400 InternalAssetsDistributedKey.pem')
                 print 30 * "-" , "Copying List of Private IP's" , 30 * "-"
                 scp.put("PrivateIps.txt")
-        
+                print 30 * "-" , "EFS ID File" , 30 * "-"
+                scp.put("efsIDFile.sh")
+
                 print 30 * "-" , "Connecting to Nodes" , 30 * "-"
                 for subnet in vpc.subnets.all():
                     if subnet.id == globalSubnet2val:
@@ -234,7 +271,8 @@ def createVPC():
                                 str(var1)
                                 command=('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/nodePackageInstall.sh ubuntu@%s:~' % (var1))
                                 stdin, stdout, stderr = sshcon.exec_command(command)
-                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh"' % (var1))
+                                stdin, stdout, stderr = sshcon.exec_command('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/efsIDFile.sh ubuntu@%s:~' % (var1))
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh efsIDFile.sh"' % (var1))
                                 stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh > buildLog.txt"' % (var1))
                                 #cprint stdout.read()
                                 print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
@@ -342,11 +380,13 @@ def vpc_cleanup(vpcid):
             for r in rt.routes:
                 try:
                     x = r.delete()
+                    print(" Route Deleted")
                    #  print(x)
                 except:
                     pass
             try:
                 rt.delete()
+                print("Table Deleted")
             except:
                 pass
                  
