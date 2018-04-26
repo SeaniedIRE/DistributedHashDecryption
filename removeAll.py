@@ -120,10 +120,17 @@ def createVPC():
     )
 
     sec_groupPrivate.authorize_ingress(
-    CidrIp='192.168.0.0/16',
+        CidrIp='192.168.0.0/16',
         IpProtocol='tcp',
         FromPort=22,
         ToPort=22
+    )
+
+    sec_groupPrivate.authorize_ingress(
+        CidrIp='192.168.2.0/24',
+        IpProtocol='tcp',
+        FromPort=2049,
+        ToPort=2049
     )
 
     print('Private Security Group is Securing Things')
@@ -253,7 +260,7 @@ def createVPC():
                 scp = SCPClient(sshcon.get_transport())
                 scp.put("/Users/sean/.aws/InternalAssetsDistributedKey.pem")
                 print 30 * "-" , "Copying Node Setup Bash Script" , 30 * "-"
-                scp.put("/Users/sean/.aws/nodePackageInstall.sh")
+                scp.put("nodePackageInstall.sh")
                 print 30 * "-" , "Chmoding Pem File" , 30 * "-"
                 stdin, stdout, stderr = sshcon.exec_command('chmod 400 InternalAssetsDistributedKey.pem')
                 print 30 * "-" , "Copying List of Private IP's" , 30 * "-"
@@ -297,7 +304,8 @@ def createVPC():
                 sshcon.close()
                # stdin, stdout, stderr = sshcon.exec_command('sudo reboot')
 
-
+    os.remove("efsIDFile.sh")
+    
     print "Package Install Complete, YAY!!!" 
 
 
