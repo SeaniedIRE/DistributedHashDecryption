@@ -7,6 +7,9 @@ from paramiko import SSHClient
 from scp import SCPClient
 
 ec2 = boto3.resource('ec2')
+client = boto3.client('ec2')
+s3 = boto3.client("s3")
+ec2client = ec2.meta.client
 
 globalSubnet1val=''
 globalSubnet2val=''
@@ -36,7 +39,8 @@ def menu():
             sys.exit
  
 def createVPC():
-    ec2client = ec2.meta.client
+    #ec2client = ec2.meta.client
+    #client = boto3.client('ec2')
 
     #ec2 = boto3.resource('ec2')
     os.system('cls' if os.name == 'nt' else 'clear') 
@@ -49,6 +53,7 @@ def createVPC():
     # we can assign a name to vpc, or any resource, by using tag
     vpc.create_tags(Tags=[{"Key": "Name", "Value": "JtR-Cloud"}])
     vpc.wait_until_available()
+    vpc.modify_attribute(EnableDnsHostnames={'Value': True})
     print('Your VPC ID is: ',vpc.id)
 
     # create then attach internet gateway
@@ -58,11 +63,13 @@ def createVPC():
     print('Internet Gateway online, ID: ',ig.id)
 
     # create a route table and a public route
-    route_table = vpc.create_route_table()
-    route = route_table.create_route(
+    route_table_public = vpc.create_route_table()
+    route_table_private = vpc.create_route_table()
+
+    routePublic = route_table_public.create_route(
         DestinationCidrBlock='0.0.0.0/0',
         GatewayId=ig.id)
-    print('Route Tables Built')
+    print('Public Table Built')
 
     # create public subnet
     subnet1 = ec2.create_subnet(CidrBlock='192.168.1.0/24', VpcId=vpc.id)
@@ -78,11 +85,23 @@ def createVPC():
     globalSubnet2val = subnet2.id
     print('Private Subnet, Setup')
 
-    # associate the route table with the subnet
+    # Building NAT Gateway
+    natGW = client.create_nat_gateway(AllocationId='eipalloc-da82e9e7', SubnetId=subnet1.id)
+    print('Waiting for gateway Status: ')
+    waiter = client.get_waiter('nat_gateway_available')
+    waiter.wait(NatGatewayIds=[natGW['NatGateway']['NatGatewayId']])
+    print('Waiting for gateway Status: Availible ')
+    # Updating the private IPs table after the GW is read
+    routePrivate = route_table_private.create_route(
+    DestinationCidrBlock='0.0.0.0/0',
+    GatewayId=natGW ['NatGateway']['NatGatewayId'])
+    print('Private Route Tables Built')
 
-    route_table.associate_with_subnet(SubnetId=subnet1.id)
-    route_table.associate_with_subnet(SubnetId=subnet2.id)
-    print('Associated Subnets With Route Table')
+    # associate the route tables with the subnets
+
+    route_table_public.associate_with_subnet(SubnetId=subnet1.id)
+    route_table_private.associate_with_subnet(SubnetId=subnet2.id)
+    print('Associated Subnets With Route Tables')
 
     # Create sec group
     sec_groupPrivate = ec2.create_security_group(
@@ -215,16 +234,13 @@ def createVPC():
                                 str(var1)
                                 command=('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/nodePackageInstall.sh ubuntu@%s:~' % (var1))
                                 stdin, stdout, stderr = sshcon.exec_command(command)
-                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "touch fart.txt"' % (var1))
                                 stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh"' % (var1))
-                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh"' % (var1))
-                                print stdout.read()
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh > buildLog.txt"' % (var1))
+                                #cprint stdout.read()
                                 print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
 
                                 #command2=("2scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@"+instance.private_ip_addresss+":~")
                                 #print command2
-                                
-
                                 #stdin, stdout, stderr = sshcon.exec_command('certPrivate = paramiko.RSAKey.from_private_key_file("/home/ubuntu/InternalAssetsDistributedKey.pem")')
                                 #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate = paramiko.SSHClient()')
                                 #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.set_missing_host_key_policy(paramiko.AutoAddPolicy())')
@@ -268,17 +284,49 @@ def vpc_cleanup(vpcid):
     for subnet in vpc.subnets.all():
         print('Termination In Progress')
         for instance in subnet.instances.all():
-            #instance.terminate()
+            instance.terminate()
             print('Please Wait')
             instance.wait_until_terminated()
     print('Instances Gone')
 
+     # delete our security groups
+    for sg in vpc.security_groups.all():
+        if sg.group_name != 'default':
+            sg.delete()
+    print('Security Groups Gone')
+
+    filter=[{"Name": "vpc-id", "Values": [ vpcid ]}]
+    natg = client.describe_nat_gateways(Filter=filter)['NatGateways']
+    for nat in natg:
+        if not (nat['State'] in ["deleted","deleting"]):
+            # if not (nat['State'] in ["deleted","deleting"]):
+            print("Deleting NAT gateway {}".format(nat['NatGatewayId']))
+            try:
+                client.delete_nat_gateway(NatGatewayId=nat['NatGatewayId'])
+                waiter = client.get_waiter('nat_gateway_available')
+                waiter.wait(Filters=[
+                    {
+                        'Name': 'state',
+                        'Values': 
+                            [
+                                'deleted',
+                            ]
+                    },{
+                        'Name': 'nat-gateway-id',
+                        'Values': [
+                             nat['NatGatewayId'],
+                        ]
+                    },
+                ])
+            except:
+                pass
 
     # detach and delete all gateways associated with the vpc
     for gw in vpc.internet_gateways.all():
         vpc.detach_internet_gateway(InternetGatewayId=gw.id)
         gw.delete()
     print("Internet Gateway Gone")
+
 
     rtl = vpc.route_tables.all()
     count = sum(1 for _ in rtl)
@@ -315,11 +363,6 @@ def vpc_cleanup(vpcid):
         ec2client.delete_vpc_endpoints(VpcEndpointIds=[ep['VpcEndpointId']])
     print('Endpoints Gone')
 
-    # delete our security groups
-    for sg in vpc.security_groups.all():
-        if sg.group_name != 'default':
-            sg.delete()
-    print('Security Groups Gone')
 
     # delete any vpc peering connections
     for vpcpeer in ec2client.describe_vpc_peering_connections(Filters=[{

@@ -16,4 +16,3 @@ sudo make -sj4
 sudo reboot
 ../run/john --test=0
 
-
