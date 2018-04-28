@@ -129,8 +129,8 @@ def createVPC():
     sec_groupPrivate.authorize_ingress(
         CidrIp='192.168.2.0/24',
         IpProtocol='tcp',
-        FromPort=2049,
-        ToPort=2049
+        FromPort=0,
+        ToPort=65535
     )
 
     print('Private Security Group is Securing Things')
@@ -148,6 +148,13 @@ def createVPC():
         IpProtocol='tcp',
         FromPort=22,
         ToPort=22
+    )
+
+    sec_groupPublic.authorize_ingress(
+        CidrIp='192.168.2.0/24',
+        IpProtocol='tcp',
+        FromPort=0,
+        ToPort=65535
     )
 
     print('Public Security Group is Securing Things Too! Only SSH and ICMP Traffic is Permitted')
@@ -208,10 +215,12 @@ def createVPC():
     print('Your Private Internal IP Addresses Are(192.168.1.* is The Controller Node): ')
     text_file = open("PrivateIps.txt", "w")
     for subnet in vpc.subnets.all():
-        for instance in subnet.instances.all():
-            print instance.private_ip_address
-            text_file.write(instance.private_ip_address)
-            text_file.write("\n")
+    	if subnet.id == globalSubnet2val:
+	        for instance in subnet.instances.all():
+	            print instance.private_ip_address
+	            tempvar=("%s slots=1" % (instance.private_ip_address))
+	            text_file.write(tempvar)
+	            text_file.write("\n")
     text_file.close()
 
     print('########################################')
@@ -240,21 +249,53 @@ def createVPC():
                 stdin, stdout, stderr = sshcon.exec_command('sudo apt-get -y update && sudo apt-get -y upgrade && sudo apt-get install -y build-essential libssl-dev && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y libgmp3-dev p7zip-full && sudo apt-get install -y libgmp3-dev p7zip-full python python-pip')
                 print stdout.read()
                 print 30 * "-" , "Dependencies Install" , 30 * "-"
-               # stdin, stdout, stderr = sshcon.exec_command('sudo apt-get install -y yasm libgmp-dev libpcap-dev libnss3-dev libkrb5-dev pkg-config nvidia-cuda-toolkit nvidia-opencl-dev libopenmpi-dev openmpi-bin')
-                # print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('sudo apt-get install -y yasm libgmp-dev libpcap-dev libnss3-dev libkrb5-dev pkg-config nvidia-cuda-toolkit nvidia-opencl-dev libopenmpi-dev openmpi-bin')
+                print stdout.read()
                 print 30 * "-" , "Cloning Latest JtR Git Repo" , 30 * "-"
-                #stdin, stdout, stderr = sshcon.exec_command('git clone git://github.com/magnumripper/JohnTheRipper -b bleeding-jumbo john')
-               #  print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('git clone git://github.com/magnumripper/JohnTheRipper -b bleeding-jumbo john')
+                print stdout.read()
                 print 30 * "-" , "Pip Installs" , 30 * "-"
                 stdin, stdout, stderr = sshcon.exec_command('pip install paramiko')
                 print stdout.read()
                 stdin, stdout, stderr = sshcon.exec_command('pip install scp')
                 print stdout.read()
                 print 30 * "-" , "Make Install in Progress" , 30 * "-"
-               # stdin, stdout, stderr = sshcon.exec_command('cd ~/john/src && sudo ./configure && sudo make -s clean && sudo make -sj4')
+                stdin, stdout, stderr = sshcon.exec_command('cd /home/ubuntu/john/src && sudo ./configure --enable-mpi && sudo make -s clean && sudo make -sj4')
+                print stdout.read()
+                print 30 * "-" , "Mounting EFS To Host" , 30 * "-"
+                stdin, stdout, stderr = sshcon.exec_command('cd /home/ubuntu/')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('git clone https://github.com/aws/efs-utils')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('mkdir efsMount')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('cd efs-utils')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('sudo apt-get -y install binutils')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('./build-deb.sh')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('sudo apt-get -y install ./build/amazon-efs-utils*deb')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('cd /home/ubuntu/')
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command("sudo mount -t efs -o tls %s:/ /home/ubuntu/efsMount" % (tempefs))
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('sudo chmod 777 efsMount/')
+                print stdout.read()
+                #stdin, stdout, stderr = sshcon.exec_command('sudo hostname controller')
                 #print stdout.read()
-               # stdin, stdout, stderr = sshcon.exec_command('../run/john --test=0') sudo apt-get install python-pip
-
+                print 30 * "-" , "Generating SSH Key" , 30 * "-"
+                stdin, stdout, stderr = sshcon.exec_command("echo | ssh-keygen -P ''")
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command("cat /home/ubuntu/.ssh/id_rsa.pub >> /home/ubuntu/.ssh/authorized_keys")
+                print stdout.read()
+                stdin, stdout, stderr = sshcon.exec_command('cd /home/ubuntu/john/run')
+                print 30 * "-" , "Running JtR Test Sequence" , 30 * "-"
+                print stdout.read()
+                #stdin, stdout, stderr = sshcon.exec_command('./john --test=0')
+                #print stdout.read()
+             
                # print stdout.read()
                 print 30 * "-" , "Copying Private Key for Nodes" , 30 * "-"
                 scp = SCPClient(sshcon.get_transport())
@@ -271,40 +312,43 @@ def createVPC():
                 print 30 * "-" , "Connecting to Nodes" , 30 * "-"
                 for subnet in vpc.subnets.all():
                     if subnet.id == globalSubnet2val:
+                    	counter=1
                         for instance in subnet.instances.all():
                             if instance.private_ip_address is not None:
                                 print ('Connecting to: ', instance.private_ip_address)
-                                var1=instance.private_ip_address
-                                str(var1)
-                                command=('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/nodePackageInstall.sh ubuntu@%s:~' % (var1))
+                                nodeip=instance.private_ip_address
+                                str(nodeip)
+                                command=('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/nodePackageInstall.sh ubuntu@%s:~' % (nodeip))
                                 stdin, stdout, stderr = sshcon.exec_command(command)
-                                stdin, stdout, stderr = sshcon.exec_command('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/efsIDFile.sh ubuntu@%s:~' % (var1))
-                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh efsIDFile.sh"' % (var1))
-                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh > buildLog.txt"' % (var1))
-                                #cprint stdout.read()
-                                print 30 * "-" , "A Node Has Been Setup" , 30 * "-"
-
-                                #command2=("2scp -i InternalAssetsDistributedKey.pem nodePackageInstall.sh ubuntu@"+instance.private_ip_addresss+":~")
-                                #print command2
-                                #stdin, stdout, stderr = sshcon.exec_command('certPrivate = paramiko.RSAKey.from_private_key_file("/home/ubuntu/InternalAssetsDistributedKey.pem")')
-                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate = paramiko.SSHClient()')
-                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.set_missing_host_key_policy(paramiko.AutoAddPolicy())')
-                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.connect(hostname = %s, username = "ubuntu", pkey = certPrivate,)' % (var1))
-
-                                #stdin, stdout, stderr = sshcon.exec_command('touch potato.txt')
-                                #stdin, stdout, stderr = sshcon.exec_command('scp = SCPClient(sshconPrivate.get_transport()')
-                                #stdin, stdout, stderr = sshcon.exec_command('scp.put("potato.txt"')
-                                #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("chmod +x nodePackageInstall.sh")')
-                               #stdin, stdout, stderr = sshcon.exec_command('sshconPrivate.exec_command("./nodePackageInstall.sh")')
-                                #stdin, stdout, stderr = sshcon.exec_command("sshconPrivate.close()")
-
+                                stdout.readlines()
+                                stdin, stdout, stderr = sshcon.exec_command('scp -o StrictHostKeyChecking=no -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/efsIDFile.sh ubuntu@%s:~' % (nodeip))
+                                stdin, stdout, stderr = sshcon.exec_command('scp -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/.ssh/id_rsa ubuntu@%s:/home/ubuntu/.ssh/' % (nodeip))
+                                stdin, stdout, stderr = sshcon.exec_command('scp -i /home/ubuntu/InternalAssetsDistributedKey.pem /home/ubuntu/.ssh/id_rsa.pub ubuntu@%s:/home/ubuntu/.ssh/' % (nodeip))
+                                
+                             	print 30 * "-" , "Node SCP's Done" , 30 * "-"
                                 
                                 
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "cat /home/ubuntu/.ssh/id_rsa.pub  >> /home/ubuntu/.ssh/authorized_keys"' % (nodeip))
+                                stdout.readlines()
+                                print 30 * "-" , "1", 30 * "-"
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "sudo hostname node%s"' % (nodeip,counter))
+                                stdout.readlines()
+                                print 30 * "-" , "2", 30 * "-"
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "chmod +x nodePackageInstall.sh efsIDFile.sh"' % (nodeip))
+                                stdout.readlines()
+                                print 30 * "-" , "3", 30 * "-"
+                                stdin, stdout, stderr = sshcon.exec_command('ssh -i /home/ubuntu/InternalAssetsDistributedKey.pem ubuntu@%s "./nodePackageInstall.sh > buildLog.txt"' % (nodeip))
+                                
+                                
+                                print 30 * "-" , "A Node Has Been Setup" , 30 * "-" 
+                                counter += 1
+
+                                              	
 
                 sshcon.close()
                # stdin, stdout, stderr = sshcon.exec_command('sudo reboot')
 
-    os.remove("efsIDFile.sh")
+    #os.remove("efsIDFile.sh")
     
     print "Package Install Complete, YAY!!!" 
 
